@@ -52,43 +52,29 @@ GPIO.cleanup()
 import time
 
 # GPIO pin configuration
-STEP_PIN = 18
-DIR_PIN = 23
-ENABLE_PIN = 24
+DIR_PIN = 23   # Direction pin
+ENABLE_PIN = 24  # Enable pin
 
 # Setup GPIO
 GPIO.setmode(GPIO.BCM)
-GPIO.setup(STEP_PIN, GPIO.OUT)
 GPIO.setup(DIR_PIN, GPIO.OUT)
 GPIO.setup(ENABLE_PIN, GPIO.OUT)
 
 # Enable the driver
 GPIO.output(ENABLE_PIN, GPIO.LOW)  # Enable the driver (LOW)
 
-# Function to move the stepper motor
-def move_stepper(steps, direction):
-    GPIO.output(DIR_PIN, direction)  # Set direction
-    for _ in range(steps):
-        GPIO.output(STEP_PIN, GPIO.HIGH)  # Step
-        time.sleep(0.001)  # Adjust speed here
-        GPIO.output(STEP_PIN, GPIO.LOW)   # Step
-        time.sleep(0.001)  # Adjust speed here
+# Set direction (HIGH for one direction, LOW for the other)
+GPIO.output(DIR_PIN, GPIO.HIGH)  # Set direction
 
 try:
+    print("Stepper motor is ON. Press Ctrl+C to stop.")
     while True:
-        # Move clockwise
-        print("Moving clockwise")
-        move_stepper(200, GPIO.HIGH)  # Move 200 steps clockwise
-        time.sleep(1)
-
-        # Move counterclockwise
-        print("Moving counterclockwise")
-        move_stepper(200, GPIO.LOW)  # Move 200 steps counterclockwise
-        time.sleep(1)
+        time.sleep(1)  # Keep the program running
 
 except KeyboardInterrupt:
     print("Program stopped by User")
 
 finally:
-    # Clean up GPIO settings
-    GPIO.cleanup()"""
+    # Disable the driver
+    GPIO.output(ENABLE_PIN, GPIO.HIGH)  # Disable the driver (HIGH)
+    GPIO.cleanup()  # Clean up GPIO settings"""
