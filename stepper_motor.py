@@ -1,80 +1,50 @@
-"""Raspberry Pi GPIO 18 (STEP)  -> Driver STEP
-Raspberry Pi GPIO 23 (DIR)   -> Driver DIR
-Raspberry Pi GPIO 24 (ENABLE) -> Driver ENABLE (or GND)
-Power Supply V+               -> Driver V+
-Power Supply GND              -> Driver GND"""
+'''Wiring based on DRV8825:
+GND across from DIR -> ground pin on pi, eg pin 9
+"2A -> blue wire from motor
+1A -> black wire from motor
+1B -> green wire from motor
+2B -> red wire from motor
+GND -> ground (black wire) from the battery
+VMOT -> positive (red wire) from battery
+EN -> GPIO 22, pin 15
+RST and SLP -. 5V pin on pi, eg pin 4
+STP -> GPIO 21, pin 40
+DIR -> GPIO 20, pin 40'''
 
+import time
 import RPi.GPIO as GPIO
-import time
 
-# GPIO pin configuration
-STEP_PIN = 18
-DIR_PIN = 23
-ENABLE_PIN = 24
+DIR = 20 
+STEP = 21 
+ENABLE = 22
+CW = 1
+CCW = 0
+SPR = 200 #number of steps
 
-# Setup GPIO
 GPIO.setmode(GPIO.BCM)
-GPIO.setup(STEP_PIN, GPIO.OUT)
-GPIO.setup(DIR_PIN, GPIO.OUT)
-GPIO.setup(ENABLE_PIN, GPIO.OUT)
+GPIO.setup(DIR, GPIO.OUT)
+GPIO.setup(STEP, GPIO.OUT)
+GPIO.setup(ENABLE, GPIO.OUT)
 
-# Enable the driver
-GPIO.output(ENABLE_PIN, GPIO.LOW)
+GPIO.output(ENABLE, GPIO.LOW)
+GPIO.output(DIR, CW)
 
-# Function to move the stepper motor
-def move_stepper(steps, direction):
-    GPIO.output(DIR_PIN, direction)  # Set direction
-    for _ in range(steps):
-        GPIO.output(STEP_PIN, GPIO.HIGH)  # Step
-        time.sleep(0.001)  # Adjust speed here
-        GPIO.output(STEP_PIN, GPIO.LOW)   # Step
-        time.sleep(0.001)  # Adjust speed here
+#completes 1 revolution cw
+for x in range(SPR):
+    GPIO.output(STEP, GPIO.HIGH)
+    time.sleep(0.01)
+    GPIO.output(STEP, GPIO.LOW)
+    time.sleep(0.01)
 
-try:
-    while True:
-        # Move clockwise
-        print("Moving clockwise")
-        move_stepper(200, GPIO.HIGH)  # Move 200 steps clockwise
-        time.sleep(1)
+time.sleep(0.5)
 
-        # Move counterclockwise
-        print("Moving counterclockwise")
-        move_stepper(200, GPIO.LOW)  # Move 200 steps counterclockwise
-        time.sleep(1)
+GPIO.output(DIR, CCW)
+#completes 1 revolution ccw
+for x in range(SPR):
+    GPIO.output(STEP, GPIO.HIGH)
+    time.sleep(0.01)
+    GPIO.output(STEP, GPIO.LOW)
+    time.sleep(0.01)
 
-except KeyboardInterrupt:
-    pass  # Exit on Ctrl+C
-
-# Clean up GPIO settings
-GPIO.cleanup()
-
-"""import RPi.GPIO as GPIO
-import time
-
-# GPIO pin configuration
-DIR_PIN = 23   # Direction pin
-ENABLE_PIN = 24  # Enable pin
-
-# Setup GPIO
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(DIR_PIN, GPIO.OUT)
-GPIO.setup(ENABLE_PIN, GPIO.OUT)
-
-# Enable the driver
-GPIO.output(ENABLE_PIN, GPIO.LOW)  # Enable the driver (LOW)
-
-# Set direction (HIGH for one direction, LOW for the other)
-GPIO.output(DIR_PIN, GPIO.HIGH)  # Set direction
-
-try:
-    print("Stepper motor is ON. Press Ctrl+C to stop.")
-    while True:
-        time.sleep(1)  # Keep the program running
-
-except KeyboardInterrupt:
-    print("Program stopped by User")
-
-finally:
-    # Disable the driver
-    GPIO.output(ENABLE_PIN, GPIO.HIGH)  # Disable the driver (HIGH)
-    GPIO.cleanup()  # Clean up GPIO settings"""
+GPIO.output(ENABLE, GPIO.HIGH) #disable driver
+GPIO.cleanup() #cleanup GPIO settings
