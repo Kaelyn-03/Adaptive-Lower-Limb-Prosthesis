@@ -12,7 +12,3 @@ GPIO: https://sourceforge.net/p/raspberry-gpio-python/wiki/Examples/
 Adafruit IMU Interface: https://github.com/land-boards/lb-boards/blob/85bca65a309e9e72ca20b445a434affc8d03e97d/Projects/QTPy/adafruit-circuitpython-bundle-7.x-mpy-20220601/examples/bno055_i2c_gpio_simpletest.py
 
 
-1: Code to manually extend/retract a linear actuator
-2:
-3:
-...
