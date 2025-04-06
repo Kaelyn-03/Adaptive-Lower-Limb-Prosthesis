@@ -53,6 +53,18 @@ i2c = busio.I2C(board.SCL, board.SDA)
 sensor1 = adafruit_bno055.BNO055_I2C(i2c, address = 0x28)
 sensor2 = adafruit_bno055.BNO055_I2C(i2c, address = 0x29)
 
+# Setup GPIO pins for the stepper motor
+DIR = 20  # Direction GPIO Pin
+STEP = 21  # Step GPIO Pin
+ENABLE = 22  # Enable GPIO Pin
+# Setup GPIO
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(DIR, GPIO.OUT)
+GPIO.setup(STEP, GPIO.OUT)
+GPIO.setup(ENABLE, GPIO.OUT)
+# Enable the driver
+GPIO.output(ENABLE, GPIO.LOW)  # Set LOW to enable the driver
+
 last_val = 0xFFFF
 
 imu_set = [sensor1, sensor2]
@@ -69,6 +81,8 @@ imu_data = {
     }
 
 foot_data = []
+COP_Y = 0
+current_angle = 0
 
 accel_dif = 0.0
 previous_accel = 0.0
@@ -157,18 +171,23 @@ def move_actuator(move_distance, direction):
         GPIO.output(IN2, GPIO.LOW)
     time.sleep(sleep_time)
     
-def motor_angle(angle)
+def rotate_motor(angle):
     #ex: 200 steps = 360 degrees
     # each step would be 1.8 degrees
     # steps * 1.8 = angle
     steps = angle / 1.8 
-    # have the user call with the angle they want and convert to steps for th code
-    print('Rotating the motor...')
+    #Rotate the motor a specified number of steps.
+    if steps > 0:
+        GPIO.output(DIR, 1)  # CW rotation
+    else:
+        GPIO.output(DIR, 0)  # CCW rotation
+
+    steps = abs(steps)  # Use absolute value for the loop
     for x in range(steps):
-        for step in step_sequence:
-            for pin in range(4):
-                GPIO.output(step_pins[pin], step[pin])
-            time.sleep(.005)
+        GPIO.output(STEP, GPIO.HIGH)
+        time.sleep(0.01)  # Adjust delay for speed
+        GPIO.output(STEP, GPIO.LOW)
+        time.sleep(0.01)
 # ----------------------------------------------------------------------------------------------
 
 # DATA STORAGE
@@ -200,56 +219,6 @@ def save_data(sensors):
                 "Linear Acceleration": imu_data["Linear Acceleration"][i],
                 "Gravity": imu_data["Gravity"][i]
             })
-# ----------------------------------------------------------------------------------------------
-
-# STEPPER MOTOR CONTROL
-# ----------------------------------------------------------------------------------------------
-# Define GPIO pins
-DIR = 20  # Direction GPIO Pin
-STEP = 21  # Step GPIO Pin
-ENABLE = 22  # Enable GPIO Pin
-
-# Setup GPIO
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(DIR, GPIO.OUT)
-GPIO.setup(STEP, GPIO.OUT)
-GPIO.setup(ENABLE, GPIO.OUT)
-
-# Enable the driver
-GPIO.output(ENABLE, GPIO.LOW)  # Set LOW to enable the driver
-
-def rotate_motor(steps):
-    #Rotate the motor a specified number of steps.
-    if steps > 0:
-        GPIO.output(DIR, 1)  # CW rotation
-    else:
-        GPIO.output(DIR, 0)  # CCW rotation
-
-    steps = abs(steps)  # Use absolute value for the loop
-    for _ in range(steps):
-        GPIO.output(STEP, GPIO.HIGH)
-        sleep(0.01)  # Adjust delay for speed
-        GPIO.output(STEP, GPIO.LOW)
-        sleep(0.01)
-
-try:
-	while True:
-    # Get user input
-		user_input = input("Enter the number of steps (positive for CW, negative for CCW) or 'exit' to stop: ")
-    
-		if user_input.lower() == 'exit':
-			break #exit the loop
-		
-		try:
-			steps = int(user_input) #steps will be ints only
-			rotate_motor(steps)
-		except ValueError:
-			print("Invalid number. Please enter an integer or 'exit'.")
-
-finally:
-    # Disable the driver and cleanup GPIO settings
-    GPIO.output(ENABLE, GPIO.HIGH)  # Set HIGH to disable the driver
-    GPIO.cleanup()
 # ----------------------------------------------------------------------------------------------
 
 # MAIN LOOP
@@ -295,6 +264,18 @@ try:
             move_actuator(0.5, 'retract')
         else:
             move_actuator('stop')
+        # Decide when the stepper motor should rotate
+        if (previous_COP > 8) and (foot_avg < 50) and (current_angle < 48) and (current_angle > -48): # find the optimal value for this statement
+            rotate_motor(8) # Move the motor to the right
+            current_angle += 8
+        elif previous_COP < 8 and foot_avg < 50:
+            rotate_motor(-8) # Move the motor to the left. Negative val might not work
+            current_angle -= 8
+        else:
+            rotate_motor(0)
+
+        if foot_avg > 50:
+            previous_COP = COP_Y # store previous COP value only when the foot is on the ground
 
         # Find the change in the euler angles to determine extension or retraction needs
         quat_dot = (q_w * previous_quat[0] + q_x * previous_quat[1] + q_y * previous_quat[2] + q_z * previous_quat[3])
@@ -309,6 +290,8 @@ except KeyboardInterrupt:
     with open("imu_data.json", "w") as file:
         json.dump(imu_data, file, indent=1)
     print('Saved the data in imu_data.json')
+    # Disable the driver and cleanup GPIO settings
+    GPIO.output(ENABLE, GPIO.HIGH)  # Set HIGH to disable the driver
     GPIO.cleanup()
 # ----------------------------------------------------------------------------------------------
 
