@@ -1,6 +1,6 @@
 '''Wiring based on DRV8825:
 GND across from DIR -> ground pin on pi, eg pin 9
-"2A -> blue wire from motor
+2A -> blue wire from motor
 1A -> black wire from motor
 1B -> green wire from motor
 2B -> red wire from motor
