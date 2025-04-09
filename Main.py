@@ -67,7 +67,26 @@ GPIO.output(ENABLE, GPIO.LOW)  # Set LOW to enable the driver
 
 last_val = 0xFFFF
 
+spi0 = spidev.SpiDev()
+spi0.open(0,0)
+spi0.max_speed_hz = 1350000
+
+spi1 = spidev.SpiDev()
+spi1.open(0,1)
+spi1.max_speed_hz = 1350000
+
+spi2 = spidev.SpiDev()
+spi2.open(0,2)
+spi2.max_speed_hz = 1350000
+
+spi3 = spidev.SpiDev()
+spi3.open(0,3)
+spi3.max_speed_hz = 1350000
+
+
+
 imu_set = [sensor1, sensor2]
+foot_data1 = []
 
 imu_data = {
         "timestamp": [[] for x in imu_set],
@@ -80,9 +99,12 @@ imu_data = {
         "Gravity": [[] for x in imu_set]
     }
 
-foot_data = []
-COP_Y = 0
+foot_data1 = []
+foot_data2 = []
+prev_foot_avg1 = 0
 current_angle = 0
+last_foot_change_time = time.time()
+gait_phase = 'STANCE'
 
 accel_dif = 0.0
 previous_accel = 0.0
@@ -112,42 +134,16 @@ def sensorData (sensor):
             "z": sensor.euler[2],
         }
     }
-'''
-def read_foot():
-    spi0 = spidev.SpiDev()
-    spi0.open(0,0)
-    spi0.max_speed_hz = 1350000
 
-    spi1 = spidev.SpiDev()
-    spi1.open(0,1)
-    spi1.max_speed_hz = 1350000
+def read_channel(spi_bus, channel):
+# if channel < 0 or channel > 7:
+#     return -1
+    adc = spi_bus.xfer2([1, (8+channel)<<4, 0])
+    foot_data1 = ((adc[1]&3) << 8) + adc[2]
+    return foot_data1
 
-    def read_channel(spi_bus, channel):
-    # if channel < 0 or channel > 7:
-    #     return -1
-        adc = spi_bus.xfer2([1, (8+channel)<<4, 0])
-        foot_data = ((adc[1]&3) << 8) + adc[2]
-        return foot_data
-
-    try:
-        while True:
-            print('First MCP3008 Reading:')
-            for channel in range(8):
-                print(f"Channel {channel}: {read_channel(spi0, channel)}", end="\t")
-            print('\n')
-
-            print('Second MCP3008 Reading:')
-            for channel in range(8):
-                print(f"Channel {channel+8}: {read_channel(spi1, channel)}", end="\t")
-            print('\n\n\n\n\n\n')
-            print('-----------------------------------')
-            time.sleep(3)        
-    except KeyboardInterrupt:
-        spi0.close()
-        spi1.close()
-        print('SPI closed!')
 # ----------------------------------------------------------------------------------------------
-'''
+
 # HARDWARE CONTROL FUNCTIONS
 # ----------------------------------------------------------------------------------------------
 def move_actuator(move_distance, direction):
@@ -225,6 +221,7 @@ def save_data(sensors):
 # ----------------------------------------------------------------------------------------------
 try:
     while True:
+        current_time = time.time()
         '''print("Temperature: {} degrees C".format(sensor.temperature))'''
     
         print(
@@ -253,29 +250,67 @@ try:
         #print(message)
         print('---------------------------------------------')
         save_data(imu_set)
-        time.sleep(3)
+        
+        print('First MCP3008 Reading:')
+        for channel in range(8):
+            print(f"Channel {channel}: {read_channel(spi0, channel)}", end="\t")
+            foot_data1.append(read_channel(spi0, channel))
+            print('\n')
+
+        print('Second MCP3008 Reading:')
+        for channel in range(8):
+            print(f"Channel {channel+8}: {read_channel(spi1, channel)}", end="\t")
+            foot_data1.append(read_channel(spi1, channel))
+            print('\n\n\n\n\n\n')
+        
+        print('Third MCP3008 Reading:')
+        for channel in range(8):
+            print(f"Channel {channel}: {read_channel(spi2, channel)}", end="\t")
+            foot_data2.append(read_channel(spi2, channel))
+            print('\n')
+
+        print('Fourth MCP3008 Reading:')
+        for channel in range(8):
+            print(f"Channel {channel+8}: {read_channel(spi3, channel)}", end="\t")
+            foot_data2.append(read_channel(spi3, channel))
+            print('\n\n\n\n\n\n')
+        print('-----------------------------------')
+        time.sleep(1)
 
         # Decide when the actuator should extend or retract
-        foot_avg = sum(foot_data) / len(foot_data)
+        foot_avg1 = sum(foot_data1) / len(foot_data1)
+        foot_avg2 = sum(foot_data2) / len(foot_data2)
+        foot_data1 = [] # Reset foot data for the next iteration
+        foot_data2 = [] # Reset foot data for the next iteration
+        foot_avg1_change = foot_avg1 - prev_foot_avg1
+        prev_foot_avg1 = foot_avg1
+        if foot_avg1_change > 100:
+            last_foot_change_time = time.time()
+            change_duration = current_time-last_foot_change_time
+            if change_duration > 1:
+                gait_phase = 'SWING'
+        elif foot_avg1_change < 100:
+            last_foot_change_time = time.time()
+            change_duration = current_time-last_foot_change_time
+            if change_duration > 1:
+                gait_phase = 'STANCE'
+             
         hip_accel_diff = sensor1.acceleration[1] - sensor2.acceleration[1]
-        if (foot_avg < 50) and (hip_accel_diff > 30):
+        if (foot_avg1 < 100) and (hip_accel_diff > 30) and gait_phase == 'SWING':
             move_actuator(0.5, 'extend')
-        elif (foot_avg < 50) and hip_accel_diff < -30:
+        elif (foot_avg1 < 100) and (hip_accel_diff < -30) and gait_phase == 'SWING':
             move_actuator(0.5, 'retract')
         else:
             move_actuator('stop')
         # Decide when the stepper motor should rotate
-        if (previous_COP > 8) and (foot_avg < 50) and (current_angle < 48) and (current_angle > -48): # find the optimal value for this statement
+        if (foot_avg1 < 100) and (gait_phase == 'SWING') and (current_angle < 48) and (current_angle > -48) and (foot_avg1 > foot_avg2): # find the optimal value for this statement
             rotate_motor(8) # Move the motor to the right
             current_angle += 8
-        elif previous_COP < 8 and foot_avg < 50:
+        elif (foot_avg1 < 100) and (gait_phase == 'SWING') and (current_angle < 48) and (current_angle > -48) and (foot_avg1 < foot_avg2):
             rotate_motor(-8) # Move the motor to the left. Negative val might not work
             current_angle -= 8
         else:
             rotate_motor(0)
-
-        if foot_avg > 50:
-            previous_COP = COP_Y # store previous COP value only when the foot is on the ground
 
         # Find the change in the euler angles to determine extension or retraction needs
         quat_dot = (q_w * previous_quat[0] + q_x * previous_quat[1] + q_y * previous_quat[2] + q_z * previous_quat[3])
@@ -293,6 +328,10 @@ except KeyboardInterrupt:
     # Disable the driver and cleanup GPIO settings
     GPIO.output(ENABLE, GPIO.HIGH)  # Set HIGH to disable the driver
     GPIO.cleanup()
+    spi0.close()
+    spi1.close()
+    spi2.close()
+    spi3.close()
 # ----------------------------------------------------------------------------------------------
 
 # Sources
